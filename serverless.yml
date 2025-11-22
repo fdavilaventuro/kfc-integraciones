@@ -1,0 +1,147 @@
+org: fabioedv
+service: kfc-integraciones
+
+provider:
+  name: aws
+  runtime: python3.12
+  region: us-east-1
+  iam:
+    role: arn:aws:iam::282163831899:role/LabRole
+  environment:
+    TABLE_NAME: Orders
+    EVENT_BUS: orders-bus
+    STRIPE_SECRET: ${env:STRIPE_SECRET}
+    STRIPE_PUBLIC: ${env:STRIPE_PUBLIC}
+
+resources:
+  Resources:
+
+    # -------------------------------
+    # DynamoDB - Tabla Orders
+    # -------------------------------
+    OrdersTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: Orders
+        BillingMode: PAY_PER_REQUEST
+        AttributeDefinitions:
+          - AttributeName: id
+            AttributeType: S
+        KeySchema:
+          - AttributeName: id
+            KeyType: HASH
+
+    # -------------------------------
+    # EventBridge Bus
+    # -------------------------------
+    OrdersEventBus:
+      Type: AWS::Events::EventBus
+      Properties:
+        Name: orders-bus
+
+    # -------------------------------
+    # S3 Bucket para imágenes (static website)
+    # -------------------------------
+    AssetsBucket:
+      Type: AWS::S3::Bucket
+      Properties:
+        BucketName: kfc-assets-hackathon
+        WebsiteConfiguration:
+          IndexDocument: index.html
+          ErrorDocument: error.html
+      DeletionPolicy: Retain
+
+    # -------------------------------
+    # EventBridge Rules
+    # -------------------------------
+    OrderReadyRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: order-ready
+        EventBusName: orders-bus
+        EventPattern:
+          detail-type:
+            - ORDER.READY
+        Targets:
+          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
+            Id: notif-ready-target
+
+    OrderPaidRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: order-paid
+        EventBusName: orders-bus
+        EventPattern:
+          detail-type:
+            - ORDER.PAID
+        Targets:
+          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
+            Id: notif-paid-target
+
+    # -------------------------------
+    # Permissions EventBridge → Lambda
+    # -------------------------------
+    PermissionReady:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
+        Action: lambda:InvokeFunction
+        Principal: events.amazonaws.com
+        SourceArn: !GetAtt OrderReadyRule.Arn
+
+    PermissionPaid:
+      Type: AWS::Lambda::Permission
+      Properties:
+        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
+        Action: lambda:InvokeFunction
+        Principal: events.amazonaws.com
+        SourceArn: !GetAtt OrderPaidRule.Arn
+
+
+functions:
+
+  # -------------------------------------
+  # GET /status/{id} — Consultar Pedido
+  # -------------------------------------
+  get_order_status:
+    handler: get_order_status.lambda_handler
+    events:
+      - http:
+          path: status/{id}
+          method: get
+
+  # -------------------------------------
+  # POST /pay — Simular pago con Stripe
+  # -------------------------------------
+  stripe_payment:
+    handler: stripe_payment.lambda_handler
+    events:
+      - http:
+          path: pay
+          method: post
+
+  # -------------------------------------
+  # POST /event/ready — enviar ORDER.READY (debug)
+  # -------------------------------------
+  send_order_ready:
+    handler: send_event_ready.lambda_handler
+    events:
+      - http:
+          path: event/ready
+          method: post
+
+  # -------------------------------------
+  # POST /event/paid — enviar ORDER.PAID (debug)
+  # -------------------------------------
+  send_order_paid:
+    handler: send_event_paid.lambda_handler
+    events:
+      - http:
+          path: event/paid
+          method: post
+
+  # -------------------------------------
+  # Lambda de Notificaciones
+  # -------------------------------------
+  notification_handler:
+    handler: notifications.lambda_handler
