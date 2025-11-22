@@ -1,6 +1,9 @@
 org: fabioedv
 service: kfc-integraciones
 
+plugins:
+  - serverless-dotenv-plugin
+
 provider:
   name: aws
   runtime: python3.12
@@ -10,8 +13,6 @@ provider:
   environment:
     TABLE_NAME: Orders
     EVENT_BUS: orders-bus
-    STRIPE_SECRET: ${env:STRIPE_SECRET}
-    STRIPE_PUBLIC: ${env:STRIPE_PUBLIC}
 
 resources:
   Resources:
@@ -40,7 +41,7 @@ resources:
         Name: orders-bus
 
     # -------------------------------
-    # S3 Bucket para imágenes (static website)
+    # S3 Bucket para imágenes
     # -------------------------------
     AssetsBucket:
       Type: AWS::S3::Bucket
@@ -101,7 +102,7 @@ resources:
 functions:
 
   # -------------------------------------
-  # GET /status/{id} — Consultar Pedido
+  # GET /status/{id}
   # -------------------------------------
   get_order_status:
     handler: get_order_status.lambda_handler
@@ -111,7 +112,7 @@ functions:
           method: get
 
   # -------------------------------------
-  # POST /pay — Simular pago con Stripe
+  # POST /pay — SIMULADO, SIN STRIPE
   # -------------------------------------
   stripe_payment:
     handler: stripe_payment.lambda_handler
@@ -121,7 +122,7 @@ functions:
           method: post
 
   # -------------------------------------
-  # POST /event/ready — enviar ORDER.READY (debug)
+  # POST /event/ready — debug
   # -------------------------------------
   send_order_ready:
     handler: send_event_ready.lambda_handler
@@ -131,7 +132,7 @@ functions:
           method: post
 
   # -------------------------------------
-  # POST /event/paid — enviar ORDER.PAID (debug)
+  # POST /event/paid — debug
   # -------------------------------------
   send_order_paid:
     handler: send_event_paid.lambda_handler
