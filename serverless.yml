@@ -128,16 +128,6 @@ functions:
           method: post
 
   # -------------------------------------
-  # POST /event/paid
-  # -------------------------------------
-  send_order_paid:
-    handler: send_event_paid.lambda_handler
-    events:
-      - http:
-          path: event/paid
-          method: post
-
-  # -------------------------------------
   # Lambda de Notificaciones
   # -------------------------------------
   notification_handler:

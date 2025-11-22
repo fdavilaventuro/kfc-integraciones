@@ -1,47 +1,38 @@
 import boto3
 import json
 import os
-from datetime import datetime
+from decimal import Decimal
+import time
 
 events = boto3.client("events")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
-# Transiciones válidas
-VALID_TRANSITIONS = {
-    "PENDING": ["READY"],
-    "READY": [],
-    "PAID": []
-}
+# Convierte Decimal a string para JSON
+def decimal_default(obj):
+    if isinstance(obj, Decimal):
+        return str(obj)
+    raise TypeError
 
 def lambda_handler(event, context):
     try:
+        # Validar body
         if "body" not in event or not event["body"]:
             return {"statusCode": 400, "body": json.dumps({"error": "Body vacío o inválido"})}
 
         body = json.loads(event["body"])
-        order_id = body.get("orderId")
-        if not order_id:
+        if "orderId" not in body:
             return {"statusCode": 400, "body": json.dumps({"error": "Falta 'orderId'"})}
 
-        # Obtener orden
+        order_id = body["orderId"]
+
+        # Verificar orden en DynamoDB
         resp = table.get_item(Key={"id": order_id})
-        order = resp.get("Item")
-        if not order:
+        if "Item" not in resp:
             return {"statusCode": 404, "body": json.dumps({"error": f"Orden {order_id} no existe"})}
 
-        # Validar transición
-        current_status = order.get("status", "PENDING")
-        if "READY" not in VALID_TRANSITIONS.get(current_status, []):
-            return {
-                "statusCode": 400,
-                "body": json.dumps({
-                    "error": f"No se puede pasar de {current_status} → READY"
-                })
-            }
-
-        # Actualizar estado en DynamoDB
-        now = datetime.utcnow().isoformat() + "Z"
+        # Actualizar estado a READY y guardar en historial
+        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         table.update_item(
             Key={"id": order_id},
             UpdateExpression="""
@@ -58,8 +49,8 @@ def lambda_handler(event, context):
             }
         )
 
-        # Enviar evento a EventBridge
-        resp_event = events.put_events(
+        # Enviar evento EventBridge
+        event_resp = events.put_events(
             Entries=[{
                 "Source": "kfc.orders",
                 "DetailType": "ORDER.READY",
@@ -68,9 +59,16 @@ def lambda_handler(event, context):
             }]
         )
 
+        # Obtener orden actualizada
+        updated_order = table.get_item(Key={"id": order_id})["Item"]
+
         return {
             "statusCode": 200,
-            "body": json.dumps({"message": "READY enviado y estado actualizado", "eventResponse": resp_event})
+            "body": json.dumps({
+                "message": "READY enviado y estado actualizado",
+                "eventResponse": event_resp,
+                "order": updated_order
+            }, default=decimal_default)
         }
 
     except Exception as e:

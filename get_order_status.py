@@ -26,9 +26,21 @@ def lambda_handler(event, context):
                 "body": json.dumps({"error": "Order not found"})
             }
 
+        # Extraer historial de estados si existe
+        status_history = item.get("statusHistory", [])
+        current_status = item.get("status", "PENDING")
+
+        result = {
+            "id": item["id"],
+            "currentStatus": current_status,
+            "statusHistory": status_history,
+            # Incluir otros campos relevantes de la orden
+            **{k: v for k, v in item.items() if k not in ["status", "statusHistory", "id"]}
+        }
+
         return {
             "statusCode": 200,
-            "body": json.dumps(item, default=decimal_default)
+            "body": json.dumps(result, default=decimal_default)
         }
 
     except Exception as e:
