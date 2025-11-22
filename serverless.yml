@@ -14,9 +14,7 @@ provider:
 resources:
   Resources:
 
-    # -------------------------------
-    # DynamoDB - Tabla Orders
-    # -------------------------------
+    # DynamoDB
     OrdersTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -29,17 +27,13 @@ resources:
           - AttributeName: id
             KeyType: HASH
 
-    # -------------------------------
     # EventBridge Bus
-    # -------------------------------
     OrdersEventBus:
       Type: AWS::Events::EventBus
       Properties:
         Name: orders-bus
 
-    # -------------------------------
-    # S3 Bucket para imágenes
-    # -------------------------------
+    # S3 bucket
     AssetsBucket:
       Type: AWS::S3::Bucket
       Properties:
@@ -49,9 +43,7 @@ resources:
           ErrorDocument: error.html
       DeletionPolicy: Retain
 
-    # -------------------------------
-    # EventBridge Rules
-    # -------------------------------
+    # EventBridge rule ORDER.READY
     OrderReadyRule:
       Type: AWS::Events::Rule
       Properties:
@@ -61,10 +53,10 @@ resources:
           detail-type:
             - ORDER.READY
         Targets:
-          - Arn: !GetAtt notification_handler.Arn
-            Id: notif-paid-target
+          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
+            Id: notification-target-ready
 
-
+    # EventBridge rule ORDER.PAID
     OrderPaidRule:
       Type: AWS::Events::Rule
       Properties:
@@ -74,34 +66,29 @@ resources:
           detail-type:
             - ORDER.PAID
         Targets:
-          - Arn: !GetAtt notification_handler.Arn
-            Id: notif-paid-target
+          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
+            Id: notification-target-paid
 
-    # -------------------------------
-    # Permissions EventBridge → Lambda
-    # -------------------------------
+    # Permission READY → Lambda
     PermissionReady:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: !GetAtt notification_handler.Arn
+        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
         Action: lambda:InvokeFunction
         Principal: events.amazonaws.com
         SourceArn: !GetAtt OrderReadyRule.Arn
 
+    # Permission PAID → Lambda
     PermissionPaid:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: !GetAtt notification_handler.Arn
+        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
         Action: lambda:InvokeFunction
         Principal: events.amazonaws.com
         SourceArn: !GetAtt OrderPaidRule.Arn
 
-
 functions:
 
-  # -------------------------------------
-  # GET /status/{id}
-  # -------------------------------------
   get_order_status:
     handler: get_order_status.lambda_handler
     events:
@@ -109,9 +96,6 @@ functions:
           path: status/{id}
           method: get
 
-  # -------------------------------------
-  # POST /pay — SIMULADO, SIN STRIPE
-  # -------------------------------------
   stripe_payment:
     handler: stripe_payment.lambda_handler
     events:
@@ -119,9 +103,6 @@ functions:
           path: pay
           method: post
 
-  # -------------------------------------
-  # POST /event/ready — debug
-  # -------------------------------------
   send_order_ready:
     handler: send_event_ready.lambda_handler
     events:
@@ -129,9 +110,6 @@ functions:
           path: event/ready
           method: post
 
-  # -------------------------------------
-  # POST /event/paid — debug
-  # -------------------------------------
   send_order_paid:
     handler: send_event_paid.lambda_handler
     events:
@@ -139,8 +117,5 @@ functions:
           path: event/paid
           method: post
 
-  # -------------------------------------
-  # Lambda de Notificaciones
-  # -------------------------------------
   notification_handler:
     handler: notifications.lambda_handler
