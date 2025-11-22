@@ -1,9 +1,6 @@
 org: fabioedv
 service: kfc-integraciones
 
-plugins:
-  - serverless-dotenv-plugin
-
 provider:
   name: aws
   runtime: python3.12
