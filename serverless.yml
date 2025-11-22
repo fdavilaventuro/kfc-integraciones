@@ -61,8 +61,9 @@ resources:
           detail-type:
             - ORDER.READY
         Targets:
-          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
-            Id: notif-ready-target
+          - Arn: !GetAtt notification_handler.Arn
+            Id: notif-paid-target
+
 
     OrderPaidRule:
       Type: AWS::Events::Rule
@@ -73,7 +74,7 @@ resources:
           detail-type:
             - ORDER.PAID
         Targets:
-          - Arn: !GetAtt NotificationHandlerLambdaFunction.Arn
+          - Arn: !GetAtt notification_handler.Arn
             Id: notif-paid-target
 
     # -------------------------------
@@ -82,7 +83,7 @@ resources:
     PermissionReady:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
+        FunctionName: !GetAtt notification_handler.Arn
         Action: lambda:InvokeFunction
         Principal: events.amazonaws.com
         SourceArn: !GetAtt OrderReadyRule.Arn
@@ -90,7 +91,7 @@ resources:
     PermissionPaid:
       Type: AWS::Lambda::Permission
       Properties:
-        FunctionName: !GetAtt NotificationHandlerLambdaFunction.Arn
+        FunctionName: !GetAtt notification_handler.Arn
         Action: lambda:InvokeFunction
         Principal: events.amazonaws.com
         SourceArn: !GetAtt OrderPaidRule.Arn
