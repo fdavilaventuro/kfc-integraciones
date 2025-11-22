@@ -43,7 +43,7 @@ resources:
     AssetsBucket:
       Type: AWS::S3::Bucket
       Properties:
-        BucketName: kfc-assets-hackathon
+        BucketName: kfc-assets
         WebsiteConfiguration:
           IndexDocument: index.html
           ErrorDocument: error.html
