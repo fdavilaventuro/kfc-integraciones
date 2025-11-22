@@ -118,4 +118,6 @@ functions:
           method: post
 
   notification_handler:
+    name: NotificationHandler
     handler: notifications.lambda_handler
+
