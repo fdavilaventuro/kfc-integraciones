@@ -14,43 +14,44 @@ VALID_TRANSITIONS = {
     "PAID": []
 }
 
+# Mapear eventos a estados
+STATUS_MAP = {
+    "ORDER.READY": "READY",
+    "ORDER.PAID": "PAID",
+    "ORDER.CREATED": "PENDING"
+}
+
 def lambda_handler(event, context):
     print("Evento recibido:", json.dumps(event))
 
-    # EventBridge puede enviar un solo evento o batch
+    # EventBridge puede enviar un solo evento o un batch
     records = event.get("Records", [event])
 
     for record in records:
-        # Detalle del evento
         detail = record.get("detail", {})
+
+        # EventBridge puede enviar el body como JSON string
         if "body" in record:
             try:
                 detail = json.loads(record["body"])
-            except:
-                print("ERROR parsing body:", record["body"])
+            except Exception as e:
+                print("ERROR parsing body:", record["body"], e)
                 continue
 
         order_id = detail.get("orderId")
         status_event = record.get("detail-type") or detail.get("type")
 
         if not order_id:
-            print("ERROR: No orderId in event")
+            print("ERROR: No orderId en evento")
             continue
 
-        # Mapear eventos a status
-        status_map = {
-            "ORDER.READY": "READY",
-            "ORDER.PAID": "PAID",
-            "ORDER.CREATED": "PENDING"  # asumimos PENDING al crear
-        }
-        new_status = status_map.get(status_event)
-
+        new_status = STATUS_MAP.get(status_event)
         if not new_status:
             print("Evento desconocido:", status_event)
             continue
 
         try:
-            # Traer orden actual
+            # Obtener orden actual
             resp = table.get_item(Key={"id": order_id})
             item = resp.get("Item")
 
