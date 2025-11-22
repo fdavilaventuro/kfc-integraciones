@@ -2,26 +2,31 @@ import boto3
 import json
 import os
 
-client = boto3.client("events")
+events = boto3.client("events")
+dynamodb = boto3.resource("dynamodb")
+table = dynamodb.Table(os.environ["TABLE_NAME"])
 
 def lambda_handler(event, context):
     try:
-        if "body" not in event:
-            return {"statusCode": 400, "body": json.dumps({"error": "No se recibió body en la solicitud"})}
+        # Validar body
+        if "body" not in event or not event["body"]:
+            return {"statusCode": 400, "body": json.dumps({"error": "Body vacío o inválido"})}
 
-        try:
-            body = json.loads(event["body"])
-        except Exception:
-            return {"statusCode": 400, "body": json.dumps({"error": "Body no es un JSON válido"})}
+        body = json.loads(event["body"])
 
-        order_id = body.get("orderId") or body.get("order_id")
-        if not order_id:
-            return {"statusCode": 400, "body": json.dumps({"error": "Falta el campo obligatorio 'orderId'"})}
+        if "orderId" not in body:
+            return {"statusCode": 400, "body": json.dumps({"error": "Falta 'orderId'"})}
 
-        # Aquí podrías validar otros campos como amount si quieres
-        # amount = body.get("amount")
+        order_id = body["orderId"]
 
-        resp = client.put_events(
+        # Verificar si existe la orden
+        result = table.get_item(Key={"id": order_id})
+
+        if "Item" not in result:
+            return {"statusCode": 404, "body": json.dumps({"error": f"Orden {order_id} no existe"})}
+
+        # Enviar evento
+        resp = events.put_events(
             Entries=[{
                 "Source": "kfc.orders",
                 "DetailType": "ORDER.PAID",
@@ -30,10 +35,8 @@ def lambda_handler(event, context):
             }]
         )
 
-        return {"statusCode": 200, "body": json.dumps(resp)}
+        return {"statusCode": 200, "body": json.dumps({"message": "Evento enviado", "eventResponse": resp})}
 
     except Exception as e:
-        return {
-            "statusCode": 500,
-            "body": json.dumps({"error": "Error interno en send_event_paid", "detail": str(e)})
-        }
+        print("ERROR:", str(e))
+        return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
