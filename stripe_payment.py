@@ -2,15 +2,15 @@ import json
 import time
 import boto3
 import os
+from datetime import datetime
 
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
-# Reglas de transición válidas
 VALID_TRANSITIONS = {
-    "PENDING": [],      # No se puede pagar aún
-    "READY": ["PAID"],  # Solo READY → PAID
-    "PAID": []          # No se puede volver a pagar
+    "PENDING": [],
+    "READY": ["PAID"],
+    "PAID": []
 }
 
 def lambda_handler(event, context):
@@ -20,28 +20,23 @@ def lambda_handler(event, context):
         if not order_id:
             return {"statusCode": 400, "body": json.dumps({"error": "orderId requerido"})}
 
-        # Traer orden de DynamoDB
+        # Obtener orden
         resp = table.get_item(Key={"id": order_id})
         order = resp.get("Item")
         if not order:
             return {"statusCode": 404, "body": json.dumps({"error": "Orden no encontrada"})}
 
         current_status = order.get("status", "PENDING")
-
-        # Validar transición
         if "PAID" not in VALID_TRANSITIONS.get(current_status, []):
             return {
                 "statusCode": 400,
-                "body": json.dumps({
-                    "error": f"No se puede pagar la orden en estado {current_status}"
-                })
+                "body": json.dumps({"error": f"No se puede pagar la orden en estado {current_status}"})
             }
 
         # Simular pago
         payment_id = f"PAY-{int(time.time())}"
+        now = datetime.utcnow().isoformat() + "Z"
 
-        # Actualizar orden en DynamoDB
-        now = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
         table.update_item(
             Key={"id": order_id},
             UpdateExpression="""

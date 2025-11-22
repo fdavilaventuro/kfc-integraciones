@@ -1,32 +1,64 @@
 import boto3
 import json
 import os
+from datetime import datetime
 
 events = boto3.client("events")
 dynamodb = boto3.resource("dynamodb")
 table = dynamodb.Table(os.environ["TABLE_NAME"])
 
+VALID_TRANSITIONS = {
+    "PENDING": [],
+    "READY": ["PAID"],
+    "PAID": []
+}
+
 def lambda_handler(event, context):
     try:
-        # Validar body
         if "body" not in event or not event["body"]:
             return {"statusCode": 400, "body": json.dumps({"error": "Body vacío o inválido"})}
 
         body = json.loads(event["body"])
-
-        if "orderId" not in body:
+        order_id = body.get("orderId")
+        if not order_id:
             return {"statusCode": 400, "body": json.dumps({"error": "Falta 'orderId'"})}
 
-        order_id = body["orderId"]
-
-        # Verificar si existe la orden
-        result = table.get_item(Key={"id": order_id})
-
-        if "Item" not in result:
+        # Obtener orden
+        resp = table.get_item(Key={"id": order_id})
+        order = resp.get("Item")
+        if not order:
             return {"statusCode": 404, "body": json.dumps({"error": f"Orden {order_id} no existe"})}
 
+        # Validar transición
+        current_status = order.get("status", "PENDING")
+        if "PAID" not in VALID_TRANSITIONS.get(current_status, []):
+            return {
+                "statusCode": 400,
+                "body": json.dumps({
+                    "error": f"No se puede pasar de {current_status} → PAID"
+                })
+            }
+
+        # Actualizar estado
+        now = datetime.utcnow().isoformat() + "Z"
+        table.update_item(
+            Key={"id": order_id},
+            UpdateExpression="""
+                SET #s = :s,
+                    updatedAt = :t,
+                    statusHistory = list_append(if_not_exists(statusHistory, :empty_list), :h)
+            """,
+            ExpressionAttributeNames={"#s": "status"},
+            ExpressionAttributeValues={
+                ":s": "PAID",
+                ":t": now,
+                ":h": [{"status": "PAID", "timestamp": now}],
+                ":empty_list": []
+            }
+        )
+
         # Enviar evento
-        resp = events.put_events(
+        resp_event = events.put_events(
             Entries=[{
                 "Source": "kfc.orders",
                 "DetailType": "ORDER.PAID",
@@ -35,8 +67,10 @@ def lambda_handler(event, context):
             }]
         )
 
-        return {"statusCode": 200, "body": json.dumps({"message": "Evento enviado", "eventResponse": resp})}
+        return {
+            "statusCode": 200,
+            "body": json.dumps({"message": "PAID enviado y estado actualizado", "eventResponse": resp_event})
+        }
 
     except Exception as e:
-        print("ERROR:", str(e))
         return {"statusCode": 500, "body": json.dumps({"error": str(e)})}
